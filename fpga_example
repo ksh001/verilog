@@ -1,0 +1,464 @@
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Company: <Name>
+//
+// File: main_module.v
+// File history:
+//      <Revision number>: <Date>: <Comments>
+//      <Revision number>: <Date>: <Comments>
+//      <Revision number>: <Date>: <Comments>
+//
+// Description: 
+//
+// <Description here>
+//
+// Targeted device: <Family::IGLOO> <Die::AGLN250V2> <Package::100 VQFP>
+// Author: <Name>
+//
+/////////////////////////////////////////////////////////////////////////////////////////////////// 
+
+//`timescale <time_units> / <precision>
+
+module main_module( 
+                    clk, 
+                    rstN, 
+                    start,
+                    input_sig,
+                    output_data,
+                    output_data_0,
+                    output_data_1,
+                    output_data_2,
+                    output_data_3,
+                    output_data_4,
+                    output_data_5,
+                    output_led )/* synthesis syn_preserve=1 */;
+
+//INPUTS PORTS
+input clk, rstN,start;
+input [3:0] input_sig;
+
+//OUTPUTS PORTS
+output reg output_data_0;
+output reg output_data_1;
+output reg output_data_2;
+output reg output_data_3;
+output reg output_data_4;
+output reg output_data_5;
+output reg [5:0] output_data,output_led;
+
+//<statements>
+
+reg [3:0] data_seq;
+reg [31:0] g_seq;
+reg [63:0] lt_seq;
+reg [13:0] counter;
+reg [5:0] output_data_buff;
+
+reg [13:0] main_counter;    // 0.5nsec(20MHz) increment
+reg [13:0] time_counter;    // Reference counter for waveforms
+reg [31:0] gi_pattern;      // GI pattern (2bit -> 1 pattern)
+reg [63:0] lts1_pattern;    // LTS1 pattern (2bit -> 1 pattern)
+reg [63:0] lts2_pattern;    // LTS2 pattern (2bit -> 1 pattern)
+reg [40:0] preamble_pattern;    // Preamble Pattern (1bit -> 1 pattern)
+
+wire gi_flag = ((time_counter > 14'd0) && (time_counter <= 14'd16)) ? 1:0;        // GI -> 16 circle
+wire lts1_flag = ((time_counter > 14'd16) && (time_counter <= 14'd48)) ? 1:0;     // LTS1 -> 32 circle
+wire lts2_flag = ((time_counter > 14'd48) && (time_counter <= 14'd80)) ? 1:0;     // LTS2 -> 32 circle
+wire preamble_flag = ((time_counter > 14'd80) && (time_counter <= 14'd120)) ? 1:0;    // Preaamble -> 40 circle
+wire data1_flag = ((time_counter > 14'd120) && (time_counter <= 14'd320)) ? 1:0;    // data1 -> 200 circle
+wire data2_flag = ((time_counter > 14'd320) && (time_counter <= 14'd520)) ? 1:0;    // data2 -> 200 circle
+
+always @(posedge clk or negedge rstN) begin
+    
+    if(!rstN) begin
+        output_data_buff <= 6'b00_0000;
+        output_led <= ~(6'b00_0000);   
+        output_data <= 6'b00_0000; 
+        output_data_0 <= 0; 
+        output_data_1 <= 0; 
+        output_data_2 <= 0; 
+        output_data_3 <= 0;
+        output_data_4 <= 0; 
+        output_data_5 <= 0;
+    end
+    else begin
+
+        if(start) begin // start <- HIGH
+
+            if( time_counter <= 14'd520 )begin  // time_counter increment
+
+                case(input_sig)
+
+                    4'b1000 : begin // 20MHz
+                        if( gi_flag ) begin     // GI output
+
+                            case( gi_pattern[31:30] )
+                                2'b00 : begin   // 1
+                                    output_data <= 6'b00_0000;
+                                end
+
+                                2'b01 : begin   // i
+                                    output_data <= 6'b00_0011;
+                                end
+
+                                2'b10 : begin   // -1
+                                    output_data <= 6'b00_1011;
+                                end
+
+                                2'b11 : begin   // -i
+                                    output_data <= 6'b00_0111;
+                                end
+                            endcase
+
+                            gi_pattern <= gi_pattern << 2;
+                        end
+
+                        else if( lts1_flag ) begin  // LST1 output
+
+                            case( lts1_pattern[63:62] )
+                                2'b00 : begin   // 1
+                                    output_data <= 6'b00_0000;
+                                end
+
+                                2'b01 : begin   // i
+                                    output_data <= 6'b00_0011;
+                                end
+
+                                2'b10 : begin   // -1
+                                    output_data <= 6'b00_1011;
+                                end
+
+                                2'b11 : begin   // -i
+                                    output_data <= 6'b00_0111;
+                                end
+                            endcase
+
+                            lts1_pattern <= lts1_pattern << 2;
+                        end
+
+                        else if( lts2_flag ) begin  // LST2 output
+                            
+                            case( lts2_pattern[63:62] )
+                                2'b00 : begin   // 1
+                                    output_data <= 6'b00_0000;
+                                end
+
+                                2'b01 : begin   // i
+                                    output_data <= 6'b00_0011;
+                                end
+
+                                2'b10 : begin   // -1
+                                    output_data <= 6'b00_1011;
+                                end
+
+                                2'b11 : begin   // -i
+                                    output_data <= 6'b00_0111;
+                                end
+                            endcase
+
+                            lts2_pattern <= lts2_pattern << 2;
+                        end
+
+                        else if( preamble_flag ) begin  // preamble output
+
+                            case( preamble_pattern[39] )
+                                1'b0 : begin   // 0
+                                    output_data <= 6'b00_0000;
+                                end
+
+                                1'b1 : begin   // 1
+                                    output_data <= 6'b00_0000;
+                                end
+                            endcase
+
+                            preamble_pattern <= preamble_pattern << 1;
+                        end
+
+                        else if( data1_flag ) begin  // data1 output    10_1010 <-> 00_0000
+                            
+                            case( time_counter % 2 )
+                                1'b0 : begin   // 0
+                                    output_data <= 6'b10_1010;
+                                end
+
+                                1'b1 : begin   // 1
+                                    output_data <= 6'b00_0000;
+                                end
+                            endcase
+                        end
+
+                        else if( data2_flag ) begin  // data2 output    01_0101 <-> 00_0000
+
+                            case( time_counter % 2 )
+                                1'b0 : begin   // 0
+                                    output_data <= 6'b01_0101;
+                                end
+
+                                1'b1 : begin   // 1
+                                    output_data <= 6'b00_0000;
+                                end
+                            endcase
+                        end
+                        time_counter <= time_counter + 1'b1;
+                    end
+
+
+                    4'b0100 : begin // 10MHz
+
+                        if( main_counter % 2'd2 == 0 ) begin
+                            if( gi_flag ) begin     // GI output
+
+                                case( gi_pattern[31:30] )
+                                    2'b00 : begin   // 1
+                                        output_data <= 6'b00_0000;
+                                    end
+
+                                    2'b01 : begin   // i
+                                        output_data <= 6'b00_0011;
+                                    end
+
+                                    2'b10 : begin   // -1
+                                        output_data <= 6'b00_1011;
+                                    end
+
+                                    2'b11 : begin   // -i
+                                        output_data <= 6'b00_0111;
+                                    end
+                                endcase
+
+                                gi_pattern <= gi_pattern << 2;
+                            end
+
+                            else if( lts1_flag ) begin  // LST1 output
+
+                                case( lts1_pattern[63:62] )
+                                    2'b00 : begin   // 1
+                                        output_data <= 6'b00_0000;
+                                    end
+
+                                    2'b01 : begin   // i
+                                        output_data <= 6'b00_0011;
+                                    end
+
+                                    2'b10 : begin   // -1
+                                        output_data <= 6'b00_1011;
+                                    end
+
+                                    2'b11 : begin   // -i
+                                        output_data <= 6'b00_0111;
+                                    end
+                                endcase
+
+                                lts1_pattern <= lts1_pattern << 2;
+                            end
+
+                            else if( lts2_flag ) begin  // LST2 output
+                                
+                                case( lts2_pattern[63:62] )
+                                    2'b00 : begin   // 1
+                                        output_data <= 6'b00_0000;
+                                    end
+
+                                    2'b01 : begin   // i
+                                        output_data <= 6'b00_0011;
+                                    end
+
+                                    2'b10 : begin   // -1
+                                        output_data <= 6'b00_1011;
+                                    end
+
+                                    2'b11 : begin   // -i
+                                        output_data <= 6'b00_0111;
+                                    end
+                                endcase
+
+                                lts2_pattern <= lts2_pattern << 2;
+                            end
+
+                            else if( preamble_flag ) begin  // preamble output
+
+                                case( preamble_pattern[39] )
+                                    1'b0 : begin   // 0
+                                        output_data <= 6'b00_0000;
+                                    end
+
+                                    1'b1 : begin   // 1
+                                        output_data <= 6'b00_0000;
+                                    end
+                                endcase
+
+                                preamble_pattern <= preamble_pattern << 1;
+                            end
+
+                            else if( data1_flag ) begin  // data1 output    10_1010 <-> 00_0000
+                                
+                                case( time_counter % 2 )
+                                    1'b0 : begin   // 0
+                                        output_data <= 6'b10_1010;
+                                    end
+
+                                    1'b1 : begin   // 1
+                                        output_data <= 6'b00_0000;
+                                    end
+                                endcase
+                            end
+
+                            else if( data2_flag ) begin  // data2 output    01_0101 <-> 00_0000
+
+                                case( time_counter % 2 )
+                                    1'b0 : begin   // 0
+                                        output_data <= 6'b01_0101;
+                                    end
+
+                                    1'b1 : begin   // 1
+                                        output_data <= 6'b00_0000;
+                                    end
+                                endcase
+                            end
+                            time_counter <= time_counter + 1'b1;
+                        end
+                    end
+
+
+                    4'b0010 : begin // 5MHz
+                        if( main_counter % 3'd4 == 0 ) begin
+
+                            if( gi_flag ) begin     // GI output
+
+                                case( gi_pattern[31:30] )
+                                    2'b00 : begin   // 1
+                                        output_data <= 6'b00_0000;
+                                    end
+
+                                    2'b01 : begin   // i
+                                        output_data <= 6'b00_0011;
+                                    end
+
+                                    2'b10 : begin   // -1
+                                        output_data <= 6'b00_1011;
+                                    end
+
+                                    2'b11 : begin   // -i
+                                        output_data <= 6'b00_0111;
+                                    end
+                                endcase
+
+                                gi_pattern <= gi_pattern << 2;
+                            end
+
+                            else if( lts1_flag ) begin  // LST1 output
+
+                                case( lts1_pattern[63:62] )
+                                    2'b00 : begin   // 1
+                                        output_data <= 6'b00_0000;
+                                    end
+
+                                    2'b01 : begin   // i
+                                        output_data <= 6'b00_0011;
+                                    end
+
+                                    2'b10 : begin   // -1
+                                        output_data <= 6'b00_1011;
+                                    end
+
+                                    2'b11 : begin   // -i
+                                        output_data <= 6'b00_0111;
+                                    end
+                                endcase
+
+                                lts1_pattern <= lts1_pattern << 2;
+                            end
+
+                            else if( lts2_flag ) begin  // LST2 output
+                                
+                                case( lts2_pattern[63:62] )
+                                    2'b00 : begin   // 1
+                                        output_data <= 6'b00_0000;
+                                    end
+
+                                    2'b01 : begin   // i
+                                        output_data <= 6'b00_0011;
+                                    end
+
+                                    2'b10 : begin   // -1
+                                        output_data <= 6'b00_1011;
+                                    end
+
+                                    2'b11 : begin   // -i
+                                        output_data <= 6'b00_0111;
+                                    end
+                                endcase
+
+                                lts2_pattern <= lts2_pattern << 2;
+                            end
+
+                            else if( preamble_flag ) begin  // preamble output
+
+                                case( preamble_pattern[39] )
+                                    1'b0 : begin   // 0
+                                        output_data <= 6'b00_0000;
+                                    end
+
+                                    1'b1 : begin   // 1
+                                        output_data <= 6'b00_0000;
+                                    end
+                                endcase
+
+                                preamble_pattern <= preamble_pattern << 1;
+                            end
+
+                            else if( data1_flag ) begin  // data1 output    10_1010 <-> 00_0000
+                                
+                                case( time_counter % 2 )
+                                    1'b0 : begin   // 0
+                                        output_data <= 6'b10_1010;
+                                    end
+
+                                    1'b1 : begin   // 1
+                                        output_data <= 6'b00_0000;
+                                    end
+                                endcase
+                            end
+
+                            else if( data2_flag ) begin  // data2 output    01_0101 <-> 00_0000
+
+                                case( time_counter % 2 )
+                                    1'b0 : begin   // 0
+                                        output_data <= 6'b01_0101;
+                                    end
+
+                                    1'b1 : begin   // 1
+                                        output_data <= 6'b00_0000;
+                                    end
+                                endcase
+                            end
+                            time_counter <= time_counter + 1'b1;
+                        end
+                    end
+
+                    default : begin // nothing
+                        time_counter <= time_counter + 1'b1;
+                    end
+                endcase
+
+                main_counter <= main_counter + 1'b1;
+            end
+
+            else begin
+                output_data <= 6'b00_0000;
+            end
+        end
+
+        // pattern, time_counter -> init
+        else begin
+            output_data     <= 6'b00_0000;
+            time_counter    <= 14'b0;
+            main_counter    <= 14'd0;
+            gi_pattern      <= 32'b11011110_00011011_11000000_00001001;       // 1=00, i=01, -1=10 and -i=11
+            lts1_pattern    <= 64'b11110111_01100100_00110001_11001000_11011110_00011011_11000000_00001001;
+            lts2_pattern    <= 64'b11110111_01100100_00110001_11001000_11011110_00011011_11000000_00001001;
+            preamble_pattern <= 40'b11111111_11111111_11111111_11111111_11111111;   // 0=0, 1=1
+        end
+    end
+end
+
+endmodule
